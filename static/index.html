@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Website Auditor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0f14;
+      --surface: #161a22;
+      --surface2: #1e2330;
+      --border: #2a2f3d;
+      --text: #e8eaf0;
+      --muted: #7a8099;
+      --accent: #5b8def;
+      --green: #3ecf8e;
+      --yellow: #f5c842;
+      --red: #f56060;
+      --radius: 12px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      padding: 40px 20px 80px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    header .badge {
+      display: inline-block;
+      background: rgba(91, 141, 239, 0.12);
+      border: 1px solid rgba(91, 141, 239, 0.3);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 16px;
+    }
+
+    header h1 {
+      font-size: clamp(28px, 5vw, 44px);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #fff;
+    }
+
+    header p {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .search-bar {
+      max-width: 640px;
+      margin: 0 auto 48px;
+      display: flex;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 6px 6px 6px 16px;
+      transition: border-color 0.2s;
+    }
+
+    .search-bar:focus-within {
+      border-color: var(--accent);
+    }
+
+    .search-bar input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: 15px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .search-bar input::placeholder { color: var(--muted); }
+
+    .search-bar button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 22px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      white-space: nowrap;
+    }
+
+    .search-bar button:hover { opacity: 0.88; }
+    .search-bar button:active { transform: scale(0.97); }
+    .search-bar button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Loading */
+    #loading {
+      display: none;
+      text-align: center;
+      padding: 60px 20px;
+    }
+
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #loading p { color: var(--muted); font-size: 14px; }
+
+    /* Error */
+    #error {
+      display: none;
+      max-width: 640px;
+      margin: 0 auto 32px;
+      background: rgba(245, 96, 96, 0.1);
+      border: 1px solid rgba(245, 96, 96, 0.3);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      color: var(--red);
+      font-size: 14px;
+    }
+
+    /* Results */
+    #results { display: none; max-width: 900px; margin: 0 auto; }
+
+    /* Overall score hero */
+    .overall-hero {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      flex-wrap: wrap;
+    }
+
+    .score-ring {
+      position: relative;
+      width: 100px; height: 100px;
+      flex-shrink: 0;
+    }
+
+    .score-ring svg { transform: rotate(-90deg); }
+
+    .score-ring .ring-bg { fill: none; stroke: var(--border); stroke-width: 8; }
+    .score-ring .ring-fill {
+      fill: none;
+      stroke-width: 8;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 1s ease;
+    }
+
+    .score-ring .ring-label {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .score-ring .ring-label .num {
+      font-size: 26px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1;
+    }
+
+    .score-ring .ring-label .den {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .overall-info h2 {
+      font-size: 20px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+
+    .overall-info p { color: var(--muted); font-size: 14px; }
+
+    /* Stats row */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+
+    .stat-card .stat-val {
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .stat-card .stat-lbl {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* Score cards grid */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .score-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+
+    .score-card .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .score-card .card-label {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+    }
+
+    .score-card .card-score {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .score-card .card-feedback {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .progress-bar {
+      height: 4px;
+      background: var(--border);
+      border-radius: 4px;
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.8s ease;
+    }
+
+    .score-high { color: var(--green); }
+    .score-mid { color: var(--yellow); }
+    .score-low { color: var(--red); }
+
+    .fill-high { background: var(--green); }
+    .fill-mid { background: var(--yellow); }
+    .fill-low { background: var(--red); }
+
+    /* Fixes */
+    .fixes-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+
+    .fixes-card h3 {
+      font-size: 14px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    .fix-item {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .fix-item:last-child { border-bottom: none; padding-bottom: 0; }
+
+    .fix-num {
+      width: 24px; height: 24px;
+      background: rgba(91, 141, 239, 0.12);
+      border: 1px solid rgba(91, 141, 239, 0.25);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .fix-text { font-size: 14px; color: var(--text); line-height: 1.5; }
+
+    /* Tag pills for meta */
+    .tag { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 3px 9px; border-radius: 20px; font-weight: 500; }
+    .tag-ok { background: rgba(62, 207, 142, 0.1); color: var(--green); border: 1px solid rgba(62, 207, 142, 0.25); }
+    .tag-bad { background: rgba(245, 96, 96, 0.1); color: var(--red); border: 1px solid rgba(245, 96, 96, 0.25); }
+
+    .tags-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+    @media (max-width: 600px) {
+      .overall-hero { flex-direction: column; text-align: center; }
+      .cards-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="badge">Powered by Groq + Llama 3.3 70B</div>
+  <h1>AI Website Auditor</h1>
+  <p>Instant UX, SEO & performance analysis — paste any URL below</p>
+</header>
+
+<div class="search-bar">
+  <input id="urlInput" type="text" placeholder="https://example.com" />
+  <button id="auditBtn" onclick="runAudit()">Audit Site</button>
+</div>
+
+<div id="error"></div>
+<div id="loading">
+  <div class="spinner"></div>
+  <p id="loadingMsg">Scraping and analyzing…</p>
+</div>
+
+<div id="results"></div>
+
+<script>
+  const SCORE_LABELS = {
+    homepage_clarity: "Homepage Clarity",
+    cta_strength: "CTA Strength",
+    seo_basics: "SEO Basics",
+    technical_health: "Technical Health",
+    content_quality: "Content Quality",
+  };
+
+  function scoreClass(s) {
+    return s >= 7 ? "score-high" : s >= 5 ? "score-mid" : "score-low";
+  }
+  function fillClass(s) {
+    return s >= 7 ? "fill-high" : s >= 5 ? "fill-mid" : "fill-low";
+  }
+  function ringColor(s) {
+    return s >= 7 ? "#3ecf8e" : s >= 5 ? "#f5c842" : "#f56060";
+  }
+  function scoreGrade(s) {
+    if (s >= 8.5) return "Excellent";
+    if (s >= 7) return "Good";
+    if (s >= 5) return "Needs Work";
+    return "Poor";
+  }
+
+  const loadingMessages = [
+    "Launching headless browser…",
+    "Waiting for JavaScript to finish…",
+    "Extracting SEO signals…",
+    "Running AI audit…",
+  ];
+  let msgIndex = 0;
+  let msgInterval;
+
+  function startLoadingMessages() {
+    msgIndex = 0;
+    document.getElementById("loadingMsg").textContent = loadingMessages[0];
+    msgInterval = setInterval(() => {
+      msgIndex = (msgIndex + 1) % loadingMessages.length;
+      document.getElementById("loadingMsg").textContent = loadingMessages[msgIndex];
+    }, 2200);
+  }
+
+  function stopLoadingMessages() { clearInterval(msgInterval); }
+
+  async function runAudit() {
+    const url = document.getElementById("urlInput").value.trim();
+    if (!url) return;
+
+    document.getElementById("error").style.display = "none";
+    document.getElementById("results").style.display = "none";
+    document.getElementById("loading").style.display = "block";
+    document.getElementById("auditBtn").disabled = true;
+    startLoadingMessages();
+
+    try {
+      const res = await fetch("/api/audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.detail || "Audit failed.");
+      }
+
+      renderResults(data, url);
+    } catch (err) {
+      const el = document.getElementById("error");
+      el.style.display = "block";
+      el.textContent = "⚠ " + err.message;
+    } finally {
+      document.getElementById("loading").style.display = "none";
+      document.getElementById("auditBtn").disabled = false;
+      stopLoadingMessages();
+    }
+  }
+
+  document.getElementById("urlInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") runAudit();
+  });
+
+  function renderResults(data, url) {
+    const meta = data._meta || {};
+    const overall = parseFloat(data.overall_score) || 0;
+    const circumference = 2 * Math.PI * 42;
+    const offset = circumference - (overall / 10) * circumference;
+
+    // Stats
+    const loadOk = meta.load_time_ms < 3000;
+    const altPct = meta.total_images > 0
+      ? Math.round(((meta.total_images - meta.images_missing_alt) / meta.total_images) * 100)
+      : 100;
+
+    const statsHtml = `
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-val">${meta.load_time_ms ?? "—"}ms</div>
+          <div class="stat-lbl">Load Time</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val">${meta.total_images ?? "—"}</div>
+          <div class="stat-lbl">Images</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val">${altPct}%</div>
+          <div class="stat-lbl">Alt Text</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val">${meta.internal_links ?? "—"}</div>
+          <div class="stat-lbl">Internal Links</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val">${meta.external_links ?? "—"}</div>
+          <div class="stat-lbl">External Links</div>
+        </div>
+      </div>
+    `;
+
+    // Tag pills
+    const tags = [
+      [meta.has_schema, "Schema Markup"],
+      [meta.has_viewport, "Viewport Meta"],
+      [meta.has_og, "Open Graph"],
+      [loadOk, "Fast Load (<3s)"],
+      [altPct >= 90, "Alt Text ≥90%"],
+    ].map(([ok, label]) =>
+      `<span class="tag ${ok ? "tag-ok" : "tag-bad"}">${ok ? "✓" : "✗"} ${label}</span>`
+    ).join("");
+
+    // Score cards
+    const cards = Object.entries(SCORE_LABELS).map(([key, label]) => {
+      const item = data[key];
+      if (!item) return "";
+      const s = item.score;
+      const pct = (s / 10) * 100;
+      return `
+        <div class="score-card">
+          <div class="card-header">
+            <span class="card-label">${label}</span>
+            <span class="card-score ${scoreClass(s)}">${s}</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill ${fillClass(s)}" style="width:${pct}%"></div>
+          </div>
+          <p class="card-feedback">${item.feedback}</p>
+        </div>
+      `;
+    }).join("");
+
+    // Fixes
+    const fixes = (data.recommended_fixes || []).map((f, i) => `
+      <div class="fix-item">
+        <div class="fix-num">${i + 1}</div>
+        <div class="fix-text">${f}</div>
+      </div>
+    `).join("");
+
+    const html = `
+      <div class="overall-hero">
+        <div class="score-ring">
+          <svg width="100" height="100" viewBox="0 0 100 100">
+            <circle class="ring-bg" cx="50" cy="50" r="42"/>
+            <circle class="ring-fill" cx="50" cy="50" r="42"
+              stroke="${ringColor(overall)}"
+              stroke-dasharray="${circumference}"
+              stroke-dashoffset="${offset}"/>
+          </svg>
+          <div class="ring-label">
+            <span class="num">${overall.toFixed(1)}</span>
+            <span class="den">/ 10</span>
+          </div>
+        </div>
+        <div class="overall-info">
+          <h2>${scoreGrade(overall)} — ${new URL(url).hostname}</h2>
+          <p>Audited on ${new Date().toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" })}</p>
+          <div class="tags-row">${tags}</div>
+        </div>
+      </div>
+
+      ${statsHtml}
+
+      <div class="cards-grid">${cards}</div>
+
+      <div class="fixes-card">
+        <h3>Recommended Fixes</h3>
+        ${fixes}
+      </div>
+    `;
+
+    const el = document.getElementById("results");
+    el.innerHTML = html;
+    el.style.display = "block";
+  }
+</script>
+</body>
+</html>
